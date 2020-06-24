@@ -15,6 +15,7 @@ ICON_MAP = {
 	'event':['bell','gold']};
 
 global_defaults = {
+	"ANNO_MODE": 'entities',  // use 'coref' for coreference annotation
 	"DEFAULT_ENTITY_TYPE": 'abstract',
 	"DEFAULT_ICON": 'question',
 	"DEFAULT_COLOR": 'gray',
@@ -22,7 +23,8 @@ global_defaults = {
 	"DEFAULT_SGML_SPAN_TAG": "entity",
 	"DEFAULT_SGML_SPAN_ATTR": "entity",
 	"DEFAULT_SGML_SENT_TAG": "s",
-	"DEFAULT_SGML_TOK_ATTR": null// use null to read tokens from plain text, not SGML tags
+	"DEFAULT_SGML_TOK_ATTR": null, // use null to read tokens from plain text, not SGML tags,
+	"DEFAULT_GROUP": "coref"
 }
 
 for (key in global_defaults){
@@ -45,6 +47,8 @@ class Entity{
 		this.toks = tok_ids;
 		this.length = this.end-this.start +1;
 		this.div_id = this.start.toString() + '-' + this.end.toString();
+		let def_group = global_defaults["DEFAULT_GROUP"];
+		this.groups = [{def_group: "g0"},];
 		
 		this.get_text = function (){ 
 			var entity_text = [];
@@ -69,6 +73,7 @@ class Token{
 entities = {};  // Stores all Entity objects for the current document, keys are span like strings, e.g. "3-4" for entity spanning tokens 3-4
 toks2entities = {}; // Hash map from 1-based token indices to all Entity objects containing them
 tokens = {}; // Stores all Token objects for the current document, keys are strings starting with "1"
+groups = {}; // Stores all span groups, keys are group types, values map group ids to included entity spans
 
 // Drop down menu for entity selection
 // if the document is clicked somewhere
@@ -300,6 +305,13 @@ function set_hovered_entity(event){
 	}
 }
 
+function select_entity(event){
+	if ($(event.target).hasClass("entity")){
+		sel_ent_id = $(event.target).attr("id");
+		$("#"+sel_ent_id).toggleClass("selected-entity");
+	}
+}
+
 function track_hover(event){
 	if (hovered_entity== null){
 		return false;
@@ -325,6 +337,7 @@ function bind_entity_events(){
 	$(".entity").hover(set_hovered_entity);
 	$(".entity").mouseover(set_hovered_entity);
 	$(".entity").mouseleave(unhighlight_entity_border);
+	$(".entity").mouseup(select_entity);
 }
 
 function bind_tok_events(){
