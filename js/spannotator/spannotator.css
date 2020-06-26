@@ -125,4 +125,10 @@
 .loading{display:block !important;background-color:gray; overflow: hidden}
 .loading i{display:block !important;}
 
-.selected-entity{background-color: cyan}
+.selected-entity{background-color: #b2f4fd !important}
+#anno_entity_text{    border: 1px solid gray;
+    margin: 4px 0px 10px 0px;
+    padding: 2px;
+    color: gray;
+    font-style: italic;
+}

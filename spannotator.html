@@ -29,6 +29,8 @@
 	<div id="toolbar">
 	<div class="col-md-12">
 		<button type="button" class="btn" onclick="add_entity(null);" title="Add span (Enter)"><i class="fa fa-plus"></i></button>
+		<button type="button" class="btn" onclick="group_selected(null);" title="Group spans (Enter)" id="btn_group"><i class="fa fa-object-group"></i></button>
+		<button type="button" class="btn" onclick="ungroup_selected(null);" title="Ungroup spans (Del)" id="btn_ungroup"><i class="fa fa-object-ungroup"></i></button>
 		<button type="button" class="btn" onclick="toggle_sents();" title="Toggle sentence view"><i class="fa fa-paragraph"></i></button>
 		<button type="button" class="btn" onclick="return show_import()" title="Paste data (admin only)"><span class="fa-stack fa-1x">
 			<i class="fa fa-file-o fa-stack-1x"></i>
@@ -38,6 +40,10 @@
 			<i class="fa fa-file-o fa-stack-1x"></i>
 			<i class="fa fa-arrow-right fa-stack-1x" style="text-indent: 7px;font-size:smaller"></i></span>
 		</button>
+		<span style="color:white">| use colors for: </span><select id="color_mode" onchange="set_color_mode();" disabled="disabled">
+			<option value="entities" selected="selected">entity types</option>
+			<option value="coref">coref</option>
+		</select>
 	</div>
 
 	<div id="import_dialog" class="dialog">
@@ -58,6 +64,15 @@
 			<textarea></textarea>
 		</p>
 	</div>
+
+	<div id="annotation_dialog" class="dialog">
+		<p>
+			<div id="anno_entity_text"></div>
+			<select id="sel_anno_key" onchange="select_anno_key();"></select>
+			<select id="sel_anno_value" onchange="select_anno_value();"></select>
+		</p>
+	</div>
+
 
 	</div>
 	<div id="editor">
