@@ -1185,6 +1185,7 @@ function read_webanno(data){
 	entities = {};
 	toks2entities = {};
 	tokens = {};
+	groups = {};
 	assigned_colors = {}
 	assigned_colors[def_group] = {0: def_color};
 	color_modes = new Set();
@@ -1574,6 +1575,7 @@ function write_webanno(){
 	}
 	if (color_modes.size > 1){
 		header += "\n#T_RL=webanno.custom.Coref|type|BT_webanno.custom.Referent";
+		extra_fields += "_\t_\t";  // columns to store edge types and paths
 	}
 	output.push(header += "\n");
 	
@@ -1610,11 +1612,13 @@ function write_webanno(){
 			anno_string = anno_array.join("|");
 		}
 		if (anno_string==''){
-			anno_string = '_';
+			anno_string = '_\t';
+		} else{
+			anno_string += "\t";
 		}
 		line = [tok.sentnum.toString() + "-" + toknum.toString() + "\t" + chars.toString() + "-" + 
 					(chars+ tok.word.length).toString()+"\t" + tok.word + "\t" +
-					anno_string + "\t"+extra_fields];
+					anno_string + extra_fields];
 		buffer.push(line);
 		sent += tok.word + " ";
 		chars += tok.word.length + 1;
@@ -1699,8 +1703,8 @@ function write_webanno(){
 				for (i in anno_holder){
 					fields[4+parseInt(i)] = anno_holder[i].join("|");
 				}
-				fields[fields.length-2] = (edge_holder[0].length > 0 ? edge_holder[0].join("|") : "_");
-				fields[fields.length-1] = (edge_holder[1].length > 0 ? edge_holder[1].join("|") : "_");
+				fields[fields.length-3] = (edge_holder[0].length > 0 ? edge_holder[0].join("|") : "_");
+				fields[fields.length-2] = (edge_holder[1].length > 0 ? edge_holder[1].join("|") : "_");
 				output.push(fields.join("\t"));
 			}
 			else{output.push(line);}
