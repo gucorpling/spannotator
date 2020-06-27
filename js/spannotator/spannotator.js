@@ -1709,7 +1709,7 @@ function write_webanno(){
 			}
 			else{output.push(line);}
 		}
-		output = output.join("\n").trim() + "\n";
+		output = output.join("\n").trim() + "\t" + "\n";
 	}
 	return output;
 }
