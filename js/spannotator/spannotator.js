@@ -209,13 +209,26 @@ if (dragged_side == "left" && proposed_start > 1){ // Add one for left boundary,
   
   // Valid span, delete old span and create new one
   old_id = orig_start.toString() + "-" + orig_end.toString();
-  entity_type = entities[old_id].type
-  delete_entity(old_id);
+  old_entity = entities[old_id];
+  entity_type = old_entity.type;
+  old_groups = old_entity.groups;
   $(ui.draggable).remove();
-  add_entity(toks_to_check);
+  new_entity = add_entity(toks_to_check);  
+  new_entity.groups = old_groups;
+  for (mode of color_modes){
+	if (mode != "entities"){
+		if (mode in old_entity.groups){
+			assign_group(new_entity,mode,old_entity.groups[mode]);
+		}
+		for (g in groups[mode]){
+			if (groups[mode][g].includes(old_id)){
+				groups[mode][g] = arrayRemove(groups[mode][g],old_id);
+			}
+		}
+	}
+  }
   change_entity(entity_type);
-  
-  //alert('detected drag from ' + draggableId + ' to '+droppableId);
+  delete_entity(old_id);
   return true;
 }
 
@@ -892,7 +905,6 @@ function run_export(format){
 }
 
 function highlight_drop(ev){
-  //$(ev.target).css("border-color", 'blue');
   ev.preventDefault();
 }
 
