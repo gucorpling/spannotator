@@ -70,9 +70,11 @@ class Entity{
 		let g = {};
 		g[def_group] = 0;
 		this.groups = g;
-		if (Object.keys(groups).length==0) {groups[def_group] = {0:[]}}
-		if (!(groups[def_group][0].includes(this.div_id))){
-			groups[def_group][0].push(this.div_id);
+		if (Object.keys(groups).length==0) {groups[def_group] = {0:[]};}
+		for (var g_type in groups){
+			if (!(groups[g_type][0].includes(this.div_id))){
+				groups[g_type][0].push(this.div_id);
+			}
 		}
 		
 		this.get_text = function (){ 
@@ -447,6 +449,7 @@ function set_color_mode(color_mode){
 }
 
 function assign_group(existing_span, gtype, new_group){
+	new_group = parseInt(new_group);
 	if (!(gtype in assigned_colors)){assigned_colors[gtype] = {0: global_defaults["DEFAULT_COLOR"]};}
 	if (!(gtype in groups)){  // new group type found
 		groups[gtype] = {0: []};
@@ -477,6 +480,7 @@ function assign_group(existing_span, gtype, new_group){
 	if (gtype in existing_span.groups){ // if this already has a group of this kind, remove the old group information
 		groups[gtype][existing_span.groups[gtype]] = arrayRemove(groups[gtype][existing_span.groups[gtype]],existing_span.div_id);
 	}
+	if (groups[gtype][existing_span.groups[gtype]].length==0 && existing_span.groups[gtype] != 0){delete groups[gtype][existing_span.groups[gtype]];} // remove group if empty
 	existing_span.groups[gtype] = new_group;
 	groups[gtype][new_group].push(existing_span.div_id);
 }
@@ -510,17 +514,19 @@ function ungroup_selected(group_type){
 	affected_groups = new Set();
 	for (div_id of sel_ent_ids){
 		e = entities[div_id];
-		old_group = e.groups[group_type];
-		if (parseInt(old_group)!=0){affected_groups.add(old_group);}
+		old_group = parseInt(e.groups[group_type]);
+		if (old_group!=0){affected_groups.add(old_group);}
 		assign_group(e, group_type,0);
 	}
 	
 	// check if there are any singletons left over as a result of ungrouping
 	for (affected_group of affected_groups){ 
-		remaining_in_old_group = groups[group_type][affected_group];
-		if (remaining_in_old_group.length < 2){
-			for (div_id of remaining_in_old_group){
-				assign_group(entities[div_id], group_type,0);
+		if (affected_group in groups[group_type]){
+			remaining_in_old_group = groups[group_type][affected_group];
+			if (remaining_in_old_group.length < 2){
+				for (div_id of remaining_in_old_group){
+					assign_group(entities[div_id], group_type,0);
+				}
 			}
 		}
 	}
@@ -996,6 +1002,14 @@ function delete_entity(entity_span){
 		delete toks2entities[start + i];
 	}
   }
+  for (gtype in groups){
+	  for (g in groups[gtype]){
+		  if (groups[gtype][g].includes(entity_span)){
+			  groups[gtype][g] = arrayRemove(groups[gtype][g],entity_span);
+		  }
+		if (groups[gtype][g].length==0 & parseInt(g) != 0){delete groups[gtype][g];} // delete group if empty
+	  }
+  }
 
   $(".custom-menu").hide(100); // hide the menu
 }
@@ -1200,6 +1214,7 @@ function read_webanno(data){
 	e2tok = {};
 	e2type = {};
 	e2annos = {};
+	senttok2globaltok = {};  // maps IDs like 2-3 (sent 2, tok 3) to IDs like 6 (sixth token in document)
 	edges = [];
 	for (line of lines){
 		if (line.includes("\t")){
@@ -1218,6 +1233,7 @@ function read_webanno(data){
 			}
 			tid += 1;
 			toknum_in_sent +=1;
+			senttok2globaltok[sent.toString() + "-" + toknum_in_sent.toString()] = tid;
 			tok = new Token(tid.toString(), toknum_in_sent, fields[2],sent_info,sent,'');
 			tokens[tid.toString()] = tok;
 			$("#selectable").append(make_token_div(tok));
@@ -1331,7 +1347,8 @@ function read_webanno(data){
 		grouping = {};
 		for (e of edges){
 			src = e[0]; trg = e[1]; etype = e[2];
-			src = ent2div[src]; trg = ent2div[trg];
+			src = (src.includes("-") ? senttok2globaltok[src] + "-" + senttok2globaltok[src] :ent2div[src]);  
+			trg = (trg.includes("-") ? senttok2globaltok[trg] + "-" + senttok2globaltok[trg] : ent2div[trg]);  
 			if (!(etype in grouping)){grouping[etype] = {};}
 			if (!(etype in etype_counts)){etype_counts[etype] = 0;}
 			etype_counts[etype]++;
