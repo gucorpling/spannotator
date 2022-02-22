@@ -66,6 +66,7 @@ class Entity{
 		this.div_id = this.start.toString() + '-' + this.end.toString();
 		this.annos = {};  // key-value pairs of additional annotations, such as "infstat": "new"
 		this.next = {};  // object mapping group types (e.g. coref) to next entity object in chain; only filled during export
+		this.ante = {};	// object mapping group types (e.g. coref) to previous entity object in chain; only filled during export
 		let def_group = global_defaults["DEFAULT_GROUP"];
 		let g = {};
 		g[def_group] = 0;
@@ -898,8 +899,10 @@ read_webanno(`#FORMAT=WebAnno TSV 3
 function run_export(format){
 	if (format=="webanno"){
 		data = write_webanno();
-	} else{
+	} else if (format=="tt"){
 		data = write_tt('s');
+	} else {
+		data = write_conllu();
 	}
 	$("#export_dialog").find('textarea').val(data);
 }
@@ -1212,7 +1215,8 @@ function read_webanno(data){
 	toks2entities = {};
 	tokens = {};
 	groups = {};
-	assigned_colors = {}
+	is2group = {};
+	assigned_colors = {};
 	assigned_colors[def_group] = {0: def_color};
 	color_modes = new Set();
 	color_modes.add("entities");	
@@ -1413,7 +1417,7 @@ function read_webanno(data){
 		}
 		$("#color_mode").html(sel_opts);
 	}
-	
+
 	init_doc();
 }
 
@@ -1811,6 +1815,177 @@ function write_tt(sent_tag){
 
 	output.push('</' + sent_tag + '>');
 	return output.join("\n");
+}
+
+function reset_coref_groupids(){ // "entities" and "groups"
+	new_groups = {};
+	group_mapping = {};
+	group_id = 1;
+	for (ent_id in entities){
+		ent = entities[ent_id];
+		cur_coref_group = ent.groups.coref;
+
+		if (cur_coref_group in group_mapping){
+			new_groups[ent_id] = group_mapping[cur_coref_group];
+		} else {
+			if (cur_coref_group == '0'){
+				new_groups[ent_id] = group_id;
+			} else {
+				group_mapping[cur_coref_group] = group_id;
+				new_groups[ent_id] = group_mapping[cur_coref_group];
+			}
+			group_id ++;
+		}
+	}
+	return new_groups;
+}
+
+function write_conllu(){
+	output = [];
+	buffer = [];
+	toknum = 1;
+	e_ids = {};
+	webanno2div = {};
+	chars = 0;
+	max_ent_id = 1;
+	sent_id = 1;
+
+	new_coref_groups = reset_coref_groupids();
+
+	// reset 'next' attribute of all entities
+	for (div_id in entities){entities[div_id].next = {};}
+	// create chains of antecedents
+	for (gtype in groups){
+		for (group_num in groups[gtype]){
+			// sort by entity start and reverse end
+			if (parseInt(group_num)==0){continue;}
+			div_ids = groups[gtype][group_num];
+			ents_to_sort = [];
+			for (div_id of div_ids){
+				ents_to_sort.push(entities[div_id]);
+			}
+			ents_to_sort.sort(function(a, b){if (a.start == b.start){return b.end - a.end} return a.start - b.start});
+			for (i in range(0,ents_to_sort.length-1)){
+				// make an edge specification pointing from next member of chain
+				i = parseInt(i);
+				ent = ents_to_sort[i];
+				next_ent = ents_to_sort[i+1];
+				next_start = tokens[next_ent.start].sentnum + "-" + tokens[next_ent.start].toknum_in_sent;
+				// this_webanno_id = (ent.length > 1 ? e_ids[ent.div_id] : "0");
+				// next_webanno_id = (next_ent.length > 1 ? e_ids[next_ent.div_id] : "0");
+				// id_part = "[" + next_webanno_id.toString() + "_" + this_webanno_id.toString()+"]";
+				// if (id_part == "[0_0]"){id_part = "";}  // edges between single token entities are implicit in webanno, with only the source token number indicating edge source
+				edge = next_ent;  // e.g. 3-15[20_18]  meaning an edge from entity 20 which starts at token 3-15, to current entity 18
+				ent.next[gtype] = edge;
+
+				ante_edge = ent;
+				next_ent.ante[gtype] = ante_edge;
+			}
+		}
+	}
+
+	output.push('# newdoc id = 001');
+
+	sent = '# text = ';
+	for (t in tokens){
+		tok = tokens[t];
+		if (sent != '# text = ' && tok.toknum_in_sent == 1){
+			if (tok.sent != 2) {
+				output.push('');
+			}
+			output.push('# sent_id = 001-' + sent_id);
+			output.push($.trim(sent));
+			output.push(buffer.join("\n"));
+			sent = '# text = ';
+			buffer = [];
+			toknum = 1;
+			sent_id ++;
+		}
+
+		anno_array = [];
+		bridge_array = [];
+		anno_string = '';
+		bridge_string = '';
+		if (tok.tid in toks2entities){
+			overlapped_ents = toks2entities[tok.tid];
+			for (span_id in overlapped_ents){
+				e = overlapped_ents[span_id];
+				if (!(e.div_id in e_ids)){
+					e_ids[e.div_id] = max_ent_id;
+					webanno2div[max_ent_id] = e.div_id;
+					max_ent_id +=1;
+				}
+				tok_id = tok.tid;
+				coref_type = '';
+				identity = '';
+				bridge_string = '';
+
+				// Deal with coreference
+				coref_g = e.groups.coref;
+				if (coref_g != '0'){
+					identity = 'coref';
+				} else {
+					identity = 'sgl';
+				}
+
+				if (tok_id == e.start == e.end){ // entity=()
+					anno_string += '(' + e_ids[e.div_id] + '-' + e.type + '-' + e.annos.infstat + '-' + new_coref_groups[e.div_id] + '-' + identity + ')';
+				} else if (tok_id == e.start){ // entity=(
+					anno_string += '(' + e_ids[e.div_id] + '-' + e.type + '-' + e.annos.infstat + '-' + new_coref_groups[e.div_id] + '-' + identity;
+				} else if (tok_id == e.end){ // entity=)
+					anno_string += e_ids[e.div_id] + ')';
+				}
+
+				// Deal with bridgings
+				if (tok_id == e.start && 'bridge' in e.ante){
+					ante_e = e.ante.bridge;
+					ante_e_id = e_ids[ante_e.div_id];
+					bridge_string += ante_e_id.toString() + '<' + e_ids[e.div_id];
+					bridge_array.push(bridge_string);
+				}
+				// find the beginning and ending of the entity
+
+				// anno_string += e.type;
+				// if (e.length > 1 || true){ // Remove true to reproduce older WebAnno behavior with no ID for single token spans
+				// 	anno_string += e_ids[e.div_id];
+				// }
+				anno_array.push(anno_string);
+				anno_string = '';
+				bridge_string = '';
+			}
+			anno_string = anno_array.join("");
+			if (bridge_array.length != 0) {
+				bridge_string = bridge_array.join(",");
+			} else {
+				bridge_string = '';
+			}
+		}
+		if (bridge_string != ''){
+			bridge_string = 'Bridge:' + bridge_string + '|';
+		}
+		if (anno_string==''){
+			anno_string = '_\t';
+		} else{
+			anno_string = bridge_string + 'Entity=' + anno_string;
+			anno_string += "\t";
+		}
+		line = [toknum.toString() + "\t" + tok.word + "\t_\t_\t_\t_\t_\t_\t_\t" + anno_string];
+		buffer.push(line);
+		sent += tok.word + " ";
+		chars += tok.word.length + 1;
+		toknum+=1;
+		
+	}
+
+	if (tok.sent != 1) {
+		output.push('');
+	}
+	output.push('# sent_id = 001-' + sent_id);
+	output.push($.trim(sent));
+	output.push(buffer.join("\n"));
+	output = output.join("\n");
+
+	return output;
 }
 
 function list_entities(pos_list, pos_filter){
