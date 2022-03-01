@@ -1964,10 +1964,10 @@ function write_conllu(){
 			bridge_string = 'Bridge:' + bridge_string + '|';
 		}
 		if (anno_string==''){
-			anno_string = '_\t';
+			anno_string = '_';
 		} else{
 			anno_string = bridge_string + 'Entity=' + anno_string;
-			anno_string += "\t";
+			anno_string += "";
 		}
 		line = [toknum.toString() + "\t" + tok.word + "\t_\t_\t_\t_\t_\t_\t_\t" + anno_string];
 		buffer.push(line);
