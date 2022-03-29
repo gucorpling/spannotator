@@ -44,6 +44,9 @@ var active_group = def_group;
 var color_modes = new Set();
 color_modes.add("entities");
 
+var is_conllu_input = false; // if the input is conllu, keep other annotations
+var line_fields = {};
+
 for (key in global_defaults){
 	if ($('#' + key).val()){
 		window[key] = $('#' + key).val();
@@ -64,6 +67,9 @@ class Entity{
 		this.toks = tok_ids;
 		this.length = this.end-this.start +1;
 		this.div_id = this.start.toString() + '-' + this.end.toString();
+		this.link = "";
+		this.mention_type = "";
+		this.min_span = "";
 		this.annos = {};  // key-value pairs of additional annotations, such as "infstat": "new"
 		this.next = {};  // object mapping group types (e.g. coref) to next entity object in chain; only filled during export
 		this.ante = {};	// object mapping group types (e.g. coref) to previous entity object in chain; only filled during export
@@ -656,9 +662,11 @@ $(document).ready(function() {
 					if ($(this).find('textarea').val().length) {
 						if ($(this).find('textarea').val().includes("#FORMAT=WebAnno")){
 							read_webanno($(this).find('textarea').val());
+						} else if ($(this).find('textarea').val().includes("# newdoc id =")){
+							read_conllu($(this).find('textarea').val());
 						} else if ($(this).find('textarea').val().includes("<")){
 							read_tt($(this).find('textarea').val());
-						}
+						} 
 						$(this).dialog("close");
 					}
 					$(this).dialog("close");
@@ -1558,6 +1566,275 @@ function read_tt(data, config){
 			}
 		} 
 	}
+	init_doc();
+}
+
+function read_conllu(data){
+	is_conllu_input = true;
+	$("#selectable").html("");  // Clear editor
+	// Clear data model
+	entities = {};
+	toks2entities = {};
+	tokens = {};
+	groups = {};
+	is2group = {};
+	assigned_colors = {};
+	assigned_colors[def_group] = {0: def_color};
+	color_modes = new Set();
+	color_modes.add("entities");	
+	anno_keys = [];
+	anno_values = {};
+
+	lines = data.split("\n");
+	sent = 0;
+	tid= 0;
+	toknum_in_sent = 0;
+	e2tok = {};
+	e2type = {};
+	e2annos = {};
+	e2minspan = {};
+	e2mention_type = {};
+	e2identity = {};
+	e2link = {};
+	e2groups = {};
+	senttok2globaltok = {};  // maps IDs like 2-3 (sent 2, tok 3) to IDs like 6 (sixth token in document)
+	edges = [];
+	e_id = 0;
+	group2eid = {};
+
+	line_fields = {};
+	meta_anno = {};
+	super_tokens = {}
+
+	for (line of lines){
+		if (line.includes("\t")){
+			// Read text
+			tid += 1;
+			line = line.trim();
+			fields = line.split("\t");
+			if (fields[0].includes("-") || fields[0].includes(".")){ // remove super tokens in conllu
+				super_tokens[tid] = line;
+				continue;
+			}
+			if (fields[0] == "1"){ //new sentence
+				sent += 1;
+				new_sent = true;
+				sent_info = sent;
+				toknum_in_sent = 0;
+			}
+			else{
+				new_sent = false;
+				sent_info = null;
+			}
+			toknum_in_sent +=1;
+			senttok2globaltok[sent.toString() + "-" + toknum_in_sent.toString()] = tid;
+			tok = new Token(tid.toString(), toknum_in_sent, fields[1],sent_info,sent,'');
+			tokens[tid.toString()] = tok;
+			$("#selectable").append(make_token_div(tok));
+			
+			// Read span annotations
+			if (fields.length>=10){
+				other_annos = [];			
+				coref_fields = "";
+				last_fields = fields[fields.length-1].split("|");
+				for (i in last_fields){
+					if (last_fields[i].startsWith("Entity=")){
+						coref_fields = last_fields[i];
+					} else if (!(last_fields[i].startsWith("Bridge"))) {
+						other_annos.push(last_fields[i]);
+					}
+				}
+
+				line_fields[tid] = fields;
+				line_fields[tid][fields.length-1] = other_annos.join('|');
+
+				// Continue if the last field does not contain any coreference relation
+				if (!coref_fields){
+					continue;
+				}
+				
+				// Read and split coref string
+				coref_fields = coref_fields.replace("Entity=", "");
+				stack = [];
+				for (idx in coref_fields){
+					if (coref_fields[idx] == "("){
+						stack.push(coref_fields[idx]);
+					} else if (stack.length != 0 && stack[stack.length-1].endsWith(")")){
+						stack.push(coref_fields[idx]);
+					} else {
+						if (stack.length == 0){
+							stack.push(coref_fields[idx]);
+						} else {
+							stack[stack.length-1] += coref_fields[idx];
+						}
+					}
+				}
+
+				// Read each mention field
+				for (i in stack){
+					ent = stack[i];
+					if (ent.startsWith("(")){ // if it's the left boundary of the entity block
+						ent = ent.replace("(", "");
+						is_one = false;
+						if (ent.endsWith(")")){
+							ent = ent.replace(")", "");
+							is_one = true;
+						}
+
+						e_id ++;
+						ent_field = ent.split("-");
+						e_type = ent_field[0];
+						e_group = ent_field[1];
+						infstat = ent_field[2];
+						min_span = ent_field[3];
+						mention_type = ent_field[4];
+						link = "";
+
+						// check if the entity links to any named entities
+						if (ent_field.length == 6){
+							link = ent_field[5];
+						}
+
+						// check if the entity span is 1
+						if (is_one == false){
+							// check if the entity group is visited
+							if (!(e_id in group2eid)){group2eid[e_group] = [];}
+							group2eid[e_group].push(e_id);
+						}
+
+						// save coref information for the current entity, referenced by the unique entity id
+						e2tok[e_id] = [tid];
+						e2type[e_id] = e_type;
+						if (!(e_id in e2annos)) {e2annos[e_id] = {};}
+						e2annos[e_id]['infstat'] = infstat;
+						e2minspan[e_id] = min_span;
+						e2mention_type[e_id] = mention_type;
+						e2link[e_id] = link;
+						e2groups[e_id] = e_group;
+					} else if (ent.endsWith(")")){ // if it's the right boundary of the entity block
+						ent = ent.replace(")", "");
+						e_group = ent;
+
+						// Get the entity id in the cache
+						mapping_eid = group2eid[e_group][group2eid[e_group].length-1];
+						// Find token ids from the beginning of the entity span recursively
+						for (j=e2tok[mapping_eid][0]+1; j<=tid; j++) {
+							e2tok[mapping_eid].push(j);
+						}
+
+						// Clear cache
+						group2eid[e_group].pop();
+					}
+				}
+			}
+		} else {
+			if (line.startsWith('# sent_id') || line.startsWith('# s_type') || line.startsWith('# newpar') || line.startsWith('# text')){
+				new_sent_id = sent + 1;
+				if (!(new_sent_id in meta_anno)){meta_anno[new_sent_id] = [];}
+				meta_anno[new_sent_id].push(line);
+
+			} else if (tid == 0 && line.startsWith('#')){
+				if (!('meta' in meta_anno)){meta_anno['meta'] = [];}
+				meta_anno['meta'].push(line);
+			}
+		}
+	}
+	
+	ent2div = {};  // maps webanno ids to div ids
+	group_list = {};  // group mentions into lists
+	for (e_id in e2tok){
+		e_type = e2type[e_id];
+		tok_span = e2tok[e_id];
+		new_ent = add_entity(tok_span);
+		if (e_id in e2annos) {new_ent.annos = e2annos[e_id];}
+		if (e_id in e2link) {new_ent.link = e2link[e_id];}
+		if (e_id in e2mention_type) {new_ent.mention_type = e2mention_type[e_id];}
+		if (e_id in e2minspan) {new_ent.min_span = e2minspan[e_id];}
+
+		change_entity(e_type);
+		ent2div[e_id] = new_ent.div_id;
+
+		cur_group = e2groups[e_id];
+		if (!(cur_group in group_list)){
+			group_list[cur_group] = [];
+		}
+		group_list[cur_group].push(new_ent.div_id);
+	}
+
+	// Remove singletons from group_list
+	for (g_id in group_list){
+		if (group_list[g_id].length == 1){
+			delete group_list[g_id];
+		}
+	}
+
+	// Assign coref groups
+	if (Object.keys(group_list).length > 0){
+		let etype_counts = {};
+		let max_group = 1;
+		grouping = {};
+
+		for (g_id in group_list){
+			for (k=1; k<group_list[g_id].length; k++){
+				src = group_list[g_id][k];
+				trg = group_list[g_id][k-1];
+				mention_type = entities[src].mention_type;
+				
+				if (!(mention_type in grouping)){grouping[mention_type] = {};}
+				if (!(mention_type in etype_counts)){etype_counts[mention_type] = 0;}
+				etype_counts[mention_type]++;
+				
+				found = false;
+				for (group in grouping[mention_type]){
+					if (grouping[mention_type][group].includes(src)){
+						old_group = parseInt(entities[trg].groups[mention_type]);
+						if (old_group!=0){
+							for (div_id in entities){
+								e = entities[div_id];
+								if (e.groups[mention_type] == old_group){
+									assign_group(e, mention_type, group);
+								}
+							}
+						}
+						assign_group(entities[trg], mention_type, group);
+						grouping[mention_type][group].push(trg);
+						found=true;
+					}
+					else if (grouping[mention_type][group].includes(trg)){
+						old_group = parseInt(entities[src].groups[mention_type]);
+						if (old_group!=0){
+							for (e of entities){
+								if (e.groups[mention_type] == old_group){
+									assign_group(e, mention_type, group);
+								}
+							}
+						}
+						assign_group(entities[src], mention_type, group);
+						grouping[mention_type][group].push(src);
+						found=true;
+					}
+				}
+				if (found){continue};
+				
+				// no match found, need a new group
+				assign_group(entities[src], mention_type, max_group);
+				assign_group(entities[trg], mention_type, max_group);
+				grouping[mention_type][max_group] = [src,trg];
+				max_group++;
+			}
+		}
+
+		max_type = Object.keys(etype_counts).reduce((a, b) => etype_counts[a] > etype_counts[b] ? a : b);
+		sel_opts = '<option value="entities">entity types</option>\n';
+		for (etype in grouping){
+			color_modes.add(etype);
+			sel_opts += '<option value="'+etype+'"';
+			if (max_type == etype){ sel_opts += ' selected="selected"';}
+			sel_opts += '>' + etype + '</option>\n';
+		}
+		$("#color_mode").html(sel_opts);
+	}
+
 	init_doc();
 }
 
