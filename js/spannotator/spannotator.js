@@ -2161,7 +2161,14 @@ function write_conllu(){
 		}
 	}
 
-	output.push('# newdoc id = 001');
+	// Add meta data of the doc
+	if (is_conllu_input == true){
+		for (i in meta_anno['meta']){
+			output.push(meta_anno['meta'][i]);
+		}
+	} else {
+		output.push('# newdoc id = 001');
+	}
 
 	sent = '# text = ';
 	for (t in tokens){
@@ -2170,8 +2177,15 @@ function write_conllu(){
 			if (tok.sent != 2) {
 				output.push('');
 			}
-			output.push('# sent_id = 001-' + sent_id);
-			output.push($.trim(sent));
+			// Add meta data of the sent
+			if (is_conllu_input == true){
+				for (i in meta_anno[sent_id]){
+					output.push(meta_anno[sent_id][i]);
+				}
+			} else {
+				output.push('# sent_id = 001-' + sent_id);
+				output.push($.trim(sent));
+			}
 			output.push(buffer.join("\n"));
 			sent = '# text = ';
 			buffer = [];
@@ -2194,21 +2208,27 @@ function write_conllu(){
 				}
 				tok_id = tok.tid;
 				coref_type = '';
-				identity = '';
+				// identity = '';
 				bridge_string = '';
 
 				// Deal with coreference
 				coref_g = e.groups.coref;
-				if (coref_g != '0'){
-					identity = 'coref';
-				} else {
-					identity = 'sgl';
-				}
+				mention_type = e.mention_type;
+				link = e.link;
+				min_span = e.min_span;
 
 				if (tok_id == e.start == e.end){ // entity=()
-					anno_string += '(' + e_ids[e.div_id] + '-' + e.type + '-' + e.annos.infstat + '-' + new_coref_groups[e.div_id] + '-' + identity + ')';
+					cur_entity_string = e_ids[e.div_id] + '-' + e.type + '-' + e.annos.infstat + '-' + min_span + '-' + mention_type;
+					if (!(link == '')){
+						cur_entity_string += link;
+					}
+					anno_string += '(' + cur_entity_string + ')';
 				} else if (tok_id == e.start){ // entity=(
-					anno_string += '(' + e_ids[e.div_id] + '-' + e.type + '-' + e.annos.infstat + '-' + new_coref_groups[e.div_id] + '-' + identity;
+					cur_entity_string = e_ids[e.div_id] + '-' + e.type + '-' + e.annos.infstat + '-' + min_span + '-' + mention_type;
+					if (!(link == '')){
+						cur_entity_string += '-' + link;
+					}
+					anno_string += '(' + cur_entity_string;
 				} else if (tok_id == e.end){ // entity=)
 					anno_string += e_ids[e.div_id] + ')';
 				}
@@ -2222,10 +2242,6 @@ function write_conllu(){
 				}
 				// find the beginning and ending of the entity
 
-				// anno_string += e.type;
-				// if (e.length > 1 || true){ // Remove true to reproduce older WebAnno behavior with no ID for single token spans
-				// 	anno_string += e_ids[e.div_id];
-				// }
 				anno_array.push(anno_string);
 				anno_string = '';
 				bridge_string = '';
@@ -2240,13 +2256,38 @@ function write_conllu(){
 		if (bridge_string != ''){
 			bridge_string = 'Bridge:' + bridge_string + '|';
 		}
-		if (anno_string==''){
+		if (anno_string == ''){
 			anno_string = '_';
 		} else{
 			anno_string = bridge_string + 'Entity=' + anno_string;
 			anno_string += "";
 		}
-		line = [toknum.toString() + "\t" + tok.word + "\t_\t_\t_\t_\t_\t_\t_\t" + anno_string];
+		if (is_conllu_input){
+			if (tok.tid-1 in super_tokens){
+				buffer.push(super_tokens[tok.tid-1]);
+			}
+
+			line_field = line_fields[tok.tid];
+			line = [];
+			for (l in line_fields[tok.tid]){
+				line.push(line_fields[tok.tid][l]);
+			}
+
+			if (line[line.length-1] == '_' || line[line.length-1] == ''){
+				if (anno_string == '_'){
+					line[line.length-1] = '_';
+				} else {
+					line[line.length-1] = anno_string;
+				}
+			} else {
+				if (!(anno_string == '_')){
+					line[line.length-1] += '|' + anno_string;
+				}
+			}
+			line = line.join('\t');
+		} else {
+			line = [toknum.toString() + "\t" + tok.word + "\t_\t_\t_\t_\t_\t_\t_\t" + anno_string];
+		}
 		buffer.push(line);
 		sent += tok.word + " ";
 		chars += tok.word.length + 1;
@@ -2257,8 +2298,15 @@ function write_conllu(){
 	if (tok.sent != 1) {
 		output.push('');
 	}
-	output.push('# sent_id = 001-' + sent_id);
-	output.push($.trim(sent));
+
+	if (is_conllu_input == true){
+		for (i in meta_anno[sent_id]){
+			output.push(meta_anno[sent_id][i]);
+		}
+	} else {
+		output.push('# sent_id = 001-' + sent_id);
+		output.push($.trim(sent));
+	}
 	output.push(buffer.join("\n"));
 	output = output.join("\n");
 
