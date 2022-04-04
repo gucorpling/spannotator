@@ -48,7 +48,7 @@
 
 	<div id="import_dialog" class="dialog">
 		<p>
-			<div>Paste text, WebAnno or CWB format:</div>
+			<div>Paste text, Conllu, WebAnno or CWB format:</div>
 			<textarea></textarea>
 		</p>
 	</div>
@@ -60,6 +60,8 @@
 			  <label for="webanno">WebAnno</label><br>
 			  <input type="radio" id="tt" name="export_format" value="tt" onclick="run_export('tt')">
 			  <label for="tt">TT/CWB SGML</label><br>
+			  <input type="radio" id="conllu" name="export_format" value="conllu" onclick="run_export('conllu')">
+			  <label for="conllu">Conllu</label><br>
 			</div>
 			<textarea></textarea>
 		</p>
