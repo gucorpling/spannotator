@@ -1698,7 +1698,7 @@ function read_conllu(data){
 						// check if the entity span is 1
 						if (is_one == false){
 							// check if the entity group is visited
-							if (!(e_id in group2eid)){group2eid[e_group] = [];}
+							if (!(e_group in group2eid)){group2eid[e_group] = [];}
 							group2eid[e_group].push(e_id);
 						}
 
@@ -2137,6 +2137,7 @@ function write_conllu(){
 			// sort by entity start and reverse end
 			if (parseInt(group_num)==0){continue;}
 			div_ids = groups[gtype][group_num];
+			div_ids.sort();
 			ents_to_sort = [];
 			for (div_id of div_ids){
 				ents_to_sort.push(entities[div_id]);
@@ -2218,13 +2219,13 @@ function write_conllu(){
 				min_span = e.min_span;
 
 				if (tok_id == e.start == e.end){ // entity=()
-					cur_entity_string = e_ids[e.div_id] + '-' + e.type + '-' + e.annos.infstat + '-' + min_span + '-' + mention_type;
+					cur_entity_string = e.type + '-' + e_ids[e.div_id] + '-' + e.annos.infstat + '-' + min_span + '-' + mention_type;
 					if (!(link == '')){
 						cur_entity_string += link;
 					}
 					anno_string += '(' + cur_entity_string + ')';
 				} else if (tok_id == e.start){ // entity=(
-					cur_entity_string = e_ids[e.div_id] + '-' + e.type + '-' + e.annos.infstat + '-' + min_span + '-' + mention_type;
+					cur_entity_string = e.type + '-' + e_ids[e.div_id] + '-' + e.annos.infstat + '-' + min_span + '-' + mention_type;
 					if (!(link == '')){
 						cur_entity_string += '-' + link;
 					}
