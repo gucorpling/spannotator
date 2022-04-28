@@ -2219,13 +2219,13 @@ function write_conllu(){
 				min_span = e.min_span;
 
 				if (tok_id == e.start == e.end){ // entity=()
-					cur_entity_string = e.type + '-' + e_ids[e.div_id] + '-' + e.annos.infstat + '-' + min_span + '-' + mention_type;
+					cur_entity_string = e_ids[e.div_id] + '-' + e.type + '-' + e.annos.infstat + '-' + min_span + '-' + mention_type;
 					if (!(link == '')){
-						cur_entity_string += link;
+						cur_entity_string += '-' + link;
 					}
 					anno_string += '(' + cur_entity_string + ')';
 				} else if (tok_id == e.start){ // entity=(
-					cur_entity_string = e.type + '-' + e_ids[e.div_id] + '-' + e.annos.infstat + '-' + min_span + '-' + mention_type;
+					cur_entity_string = e_ids[e.div_id] + '-' + e.type + '-' + e.annos.infstat + '-' + min_span + '-' + mention_type;
 					if (!(link == '')){
 						cur_entity_string += '-' + link;
 					}
